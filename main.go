@@ -2,6 +2,7 @@ package main
 
 import (
 	"net"
+	"time"
 
 	"github.com/rs/zerolog/log"
 )
@@ -28,6 +29,8 @@ func main() {
 					log.Error().Err(err).Msg("tcp read error")
 					return
 				}
+
+				time.Sleep(time.Second * 5)
 
 				_, err = c.Write(b[:n]) // 블로킹 쓰기
 				if err != nil {
