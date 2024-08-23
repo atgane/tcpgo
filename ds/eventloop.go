@@ -1,6 +1,10 @@
 package ds
 
-import "sync/atomic"
+import (
+	"errors"
+	"sync"
+	"sync/atomic"
+)
 
 type Eventloop[T any] struct {
 	queue         chan T
@@ -21,7 +25,59 @@ func NewEventloop[T any](dispatchCount, queueSize int, handler func(T)) *Eventlo
 	return e
 }
 
-func (e *Eventloop[T]) Run()
-func (e *Eventloop[T]) Send(event T) error
-func (e *Eventloop[T]) Close()
-func (e *Eventloop[T]) ForceClose()
+func (e *Eventloop[T]) Run() {
+	wg := sync.WaitGroup{}
+	for range e.dispatchCount {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			e.dispatch()
+		}()
+	}
+	wg.Wait()
+}
+
+// ⚠️
+func (e *Eventloop[T]) Send(event T) error {
+	select {
+	case <-e.closeCh:
+		return ErrAlreadyClosedLoop
+	case e.queue <- event:
+		return nil
+	}
+}
+
+// ⚠️
+func (e *Eventloop[T]) Close() {
+	if !e.closed.CompareAndSwap(false, true) {
+		return
+	}
+
+	close(e.closeCh)
+}
+
+// ⚠️
+func (e *Eventloop[T]) ForceClose() {
+	if !e.closed.CompareAndSwap(false, true) {
+		return
+	}
+
+	close(e.closeCh)
+	close(e.queue)
+}
+
+func (e *Eventloop[T]) dispatch() {
+	for {
+		select {
+		case event, ok := <-e.queue:
+			if !ok {
+				return
+			}
+			e.handler(event)
+		case <-e.closeCh:
+			return
+		}
+	}
+}
+
+var ErrAlreadyClosedLoop = errors.New("already closed loop")
