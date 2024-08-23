@@ -1,7 +1,7 @@
 package main
 
 import (
-	"net"
+	"main/handler"
 
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
@@ -9,34 +9,30 @@ import (
 
 func main() {
 	zerolog.SetGlobalLevel(zerolog.TraceLevel)
-	listener, err := net.Listen("tcp", ":1212")
-	if err != nil {
-		log.Fatal().Err(err).Msg("tcp listen error")
-	}
 
-	for {
-		c, err := listener.Accept()
-		if err != nil {
-			log.Fatal().Err(err).Msg("tcp accept error")
-		}
+	h := &TCPServerHandler{}
+	config := handler.NewTCPServerConfig()
+	config.Port = 1212
+	s := handler.NewTCPServer(h, config)
+	s.Run()
+}
 
-		go func() {
-			b := make([]byte, 1024)
-			for {
-				n, err := c.Read(b)
-				if err != nil {
-					log.Error().Err(err).Msg("connection read error")
-					return
-				}
+type TCPServerHandler struct{}
 
-				log.Trace().Int("readSize", n).Bytes("data", b[:n]).Msg("connection read success")
+func (t *TCPServerHandler) OnOpen(conn *handler.Conn) {
+	log.Info().Str("socketId", conn.Id).Msg("connection open")
+}
 
-				_, err = c.Write(b[:n])
-				if err != nil {
-					log.Error().Err(err).Msg("connection write error")
-					return
-				}
-			}
-		}()
-	}
+func (t *TCPServerHandler) OnClose(conn *handler.Conn) {
+	log.Info().Str("socketId", conn.Id).Msg("connection close")
+}
+
+func (t *TCPServerHandler) OnRead(conn *handler.Conn, b []byte) (n int) {
+	log.Info().Str("socketId", conn.Id).Msg("connection read")
+	conn.Write(b)
+	return len(b)
+}
+
+func (t *TCPServerHandler) OnReadError(conn *handler.Conn, err error) {
+	log.Error().Str("socketId", conn.Id).Err(err).Msg("connection read error")
 }
