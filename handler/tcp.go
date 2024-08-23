@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"fmt"
 	"main/ds"
 	"net"
 	"sync/atomic"
@@ -41,6 +42,38 @@ func NewTCPServer(handler TCPServerHandler, config *TCPServerConfig) *TCPServer 
 	return s
 }
 
-func (s *TCPServer) Run() error
+func (s *TCPServer) Run() error {
+	var err error
+	s.listener, err = net.Listen("tcp", fmt.Sprintf(":%d", s.config.Port))
+	if err != nil {
+		return err
+	}
 
-func (s *TCPServer) Close()
+	for {
+		c, err := s.listener.Accept()
+		if err != nil {
+			if s.closed.Load() {
+				return nil
+			}
+			return err
+		}
+
+		go func(c net.Conn) {
+			conn := newConn(c, s.handler, s.config.ConnConfig)
+
+			s.ConnMap.Store(conn.Id, conn)
+			s.handler.OnOpen(conn)
+			conn.run()
+			s.handler.OnClose(conn)
+			s.ConnMap.Delete(conn.Id)
+		}(c)
+	}
+}
+
+func (s *TCPServer) Close() {
+	if !s.closed.CompareAndSwap(false, true) {
+		return
+	}
+
+	s.listener.Close()
+}
