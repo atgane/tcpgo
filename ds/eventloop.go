@@ -37,8 +37,20 @@ func (e *Eventloop[T]) Run() {
 	wg.Wait()
 }
 
-// ⚠️
 func (e *Eventloop[T]) Send(event T) error {
+	if e.closed.Load() {
+		return ErrAlreadyClosedLoop
+	}
+
+	e.state.Add(1)
+	defer e.state.Add(-1)
+
+	select {
+	case <-e.closeCh:
+		return ErrAlreadyClosedLoop
+	default:
+	}
+
 	select {
 	case <-e.closeCh:
 		return ErrAlreadyClosedLoop
@@ -47,7 +59,6 @@ func (e *Eventloop[T]) Send(event T) error {
 	}
 }
 
-// ⚠️
 func (e *Eventloop[T]) Close() {
 	if !e.closed.CompareAndSwap(false, true) {
 		return
@@ -56,13 +67,14 @@ func (e *Eventloop[T]) Close() {
 	close(e.closeCh)
 }
 
-// ⚠️
 func (e *Eventloop[T]) ForceClose() {
 	if !e.closed.CompareAndSwap(false, true) {
 		return
 	}
 
 	close(e.closeCh)
+	for e.state.Load() != 0 {
+	}
 	close(e.queue)
 }
 
@@ -74,8 +86,20 @@ func (e *Eventloop[T]) dispatch() {
 				return
 			}
 			e.handler(event)
+			continue
+		default:
+		}
+
+		select {
+		case event, ok := <-e.queue:
+			if !ok {
+				return
+			}
+			e.handler(event)
 		case <-e.closeCh:
-			return
+			if e.state.Load() == 0 {
+				return
+			}
 		}
 	}
 }
