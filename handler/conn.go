@@ -1,18 +1,21 @@
 package handler
 
 import (
+	"main/ds"
 	"net"
+	"sync"
 	"sync/atomic"
 
 	"github.com/google/uuid"
 )
 
 type Conn struct {
-	Id      string
-	conn    net.Conn
-	handler TCPServerHandler
-	config  *ConnConfig
-	closed  atomic.Bool
+	Id             string
+	conn           net.Conn
+	handler        TCPServerHandler
+	config         *ConnConfig
+	closed         atomic.Bool
+	writeEventloop *ds.Eventloop[[]byte]
 }
 
 func newConnConfig() *ConnConfig {
@@ -40,6 +43,7 @@ func newConn(
 		handler: handler,
 		config:  config,
 	}
+	c.writeEventloop = ds.NewEventloop(1, 16, c.onWrite)
 	return c
 }
 
@@ -66,10 +70,28 @@ func (c *Conn) Close() {
 		return
 	}
 
+	c.writeEventloop.Close()
 	c.conn.Close()
 }
 
 func (c *Conn) run() {
+	wg := sync.WaitGroup{}
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		c.onRead()
+	}()
+	go func() {
+		defer wg.Done()
+		c.writeEventloop.Run()
+	}()
+
+	wg.Wait()
+}
+
+func (c *Conn) onRead() {
+	defer c.Close()
+
 	b := make([]byte, c.config.BufferSize)
 	buf := make([]byte, c.config.BufferSize)
 	for {
@@ -94,5 +116,23 @@ func (c *Conn) run() {
 			read += p
 		}
 		buf = buf[read:]
+	}
+}
+
+func (c *Conn) onWrite(b []byte) {
+	var err error
+	p := 0
+	write := 0
+	l := len(b)
+	for write < l {
+		p, err = c.conn.Write(b[write:])
+		if err != nil {
+			if c.closed.Load() {
+				return
+			}
+			c.handler.OnWriteError(c, err)
+			return
+		}
+		write += p
 	}
 }

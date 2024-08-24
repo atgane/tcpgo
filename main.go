@@ -36,3 +36,7 @@ func (t *TCPServerHandler) OnRead(conn *handler.Conn, b []byte) (n int) {
 func (t *TCPServerHandler) OnReadError(conn *handler.Conn, err error) {
 	log.Error().Str("socketId", conn.Id).Err(err).Msg("connection read error")
 }
+
+func (t *TCPServerHandler) OnWriteError(conn *handler.Conn, err error) {
+	log.Error().Str("socketId", conn.Id).Err(err).Msg("connection write error")
+}

@@ -31,6 +31,7 @@ type TCPServerHandler interface {
 	OnClose(conn *Conn)
 	OnRead(conn *Conn, b []byte) (n int)
 	OnReadError(conn *Conn, err error)
+	OnWriteError(conn *Conn, err error)
 }
 
 func NewTCPServer(handler TCPServerHandler, config *TCPServerConfig) *TCPServer {
