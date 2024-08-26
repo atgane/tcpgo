@@ -7,13 +7,15 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
+var s *handler.TCPServer
+
 func main() {
 	zerolog.SetGlobalLevel(zerolog.TraceLevel)
 
 	h := &TCPServerHandler{}
 	config := handler.NewTCPServerConfig()
 	config.Port = 1212
-	s := handler.NewTCPServer(h, config)
+	s = handler.NewTCPServer(h, config)
 	s.Run()
 }
 
@@ -29,7 +31,10 @@ func (t *TCPServerHandler) OnClose(conn *handler.Conn) {
 
 func (t *TCPServerHandler) OnRead(conn *handler.Conn, b []byte) (n int) {
 	log.Info().Str("socketId", conn.Id).Msg("connection read")
-	conn.Write(b)
+	s.ConnMap.Range(func(id string, c *handler.Conn) bool {
+		c.Write(b)
+		return true
+	})
 	return len(b)
 }
 
