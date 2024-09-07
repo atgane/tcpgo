@@ -12,6 +12,7 @@ type Eventloop[T any] struct {
 	dispatchCount int
 	closeCh       chan struct{}
 	closed        atomic.Bool
+	forceClosed   atomic.Bool
 	state         atomic.Int32
 }
 
@@ -75,14 +76,14 @@ func (e *Eventloop[T]) ForceClose() {
 	close(e.closeCh)
 	for e.state.Load() != 0 {
 	}
-	close(e.queue)
+	e.forceClosed.Store(true)
 }
 
 func (e *Eventloop[T]) dispatch() {
 	for {
 		select {
-		case event, ok := <-e.queue:
-			if !ok {
+		case event := <-e.queue:
+			if e.forceClosed.Load() {
 				return
 			}
 			e.handler(event)
@@ -91,8 +92,8 @@ func (e *Eventloop[T]) dispatch() {
 		}
 
 		select {
-		case event, ok := <-e.queue:
-			if !ok {
+		case event := <-e.queue:
+			if e.forceClosed.Load() {
 				return
 			}
 			e.handler(event)

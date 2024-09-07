@@ -93,7 +93,7 @@ func (c *Conn) onRead() {
 	defer c.Close()
 
 	b := make([]byte, c.config.BufferSize)
-	buf := make([]byte, c.config.BufferSize)
+	buf := make([]byte, 0, c.config.BufferSize)
 	for {
 		n, err := c.conn.Read(b)
 		if err != nil {
